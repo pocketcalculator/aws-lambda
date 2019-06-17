@@ -1,9 +1,12 @@
+# -----------------------------------------------------------------------------
+# Lambda function that backs up EBS volumes on EC2 instances tagged with 'backup = true'.
+# -----------------------------------------------------------------------------
+
 import boto3
 import collections
 import datetime
 import time
 import sys
-
 
 today = datetime.date.today()
 today_string = today.strftime('%Y/%m/%d')
@@ -35,7 +38,7 @@ def lambda_handler(event, context):
     # We only want to look through instances with the following tag key value pair: auto_snapshot : true
         instances = ec2.instances.filter(
             Filters=[
-                {'Name': 'tag:auto_snapshot', 'Values': ['true']}
+                {'Name': 'tag:backup', 'Values': ['true']}
             ]
         )
 
@@ -50,19 +53,22 @@ def lambda_handler(event, context):
                 if tag['Key'] == 'application':
                     application = tag['Value']
 
-            print('Found tagged instance \'{1}\', id: {0}, state: {2}'.format(i.id, name, i.state['Name']))
+            print('Found tagged instance \'{1}\', id: {0}, state: {2}'.format(
+                i.id, name, i.state['Name']))
 
             vols = i.volumes.all()  # Iterate through each instance's volumes
             for v in vols:
-                print('{0} is attached to volume {1}, proceeding to snapshot'.format(name, v.id))
+                print(
+                    '{0} is attached to volume {1}, proceeding to snapshot'.format(name, v.id))
                 volume_ids.extend(v.id)
                 snapshot = v.create_snapshot(
-                    Description = 'Backup of {0}, on volume {1} - Created {2}'.format(name, v.id, today_string),
+                    Description='Backup of {0}, on volume {1} - Created {2}'.format(
+                        name, v.id, today_string),
                 )
                 snapshot.create_tags(  # Add the following tags to the new snapshot
-                    Tags = [
+                    Tags=[
                         {
-                            'Key': 'auto_snap',
+                            'Key': 'lambda_snapshot',
                             'Value': 'true'
                         },
                         {
@@ -95,27 +101,30 @@ def lambda_handler(event, context):
                 snapshots = ec2.snapshots.filter(
                     Filters=[
                         {
-                            'Name': 'tag:auto_snap', 'Values': ['true']
+                            'Name': 'tag:lambda_snapshot', 'Values': ['true']
                         }
                     ]
                 )
 
-                print('Checking for out of date snapshots for instance {0}...'.format(name))
+                print(
+                    'Checking for out of date snapshots for instance {0}...'.format(name))
                 for snap in snapshots:
                     can_delete = False
-                    for tag in snap.tags: # Use these if statements to get each snapshot's
-                                        # cleated on date, name and auto_snap tag
+                    for tag in snap.tags:
+# Use these if statements to get each snapshot's created on date, name and lambda_snapshot tag
                         if tag['Key'] == 'CreatedOn':
                             created_on_string = tag['Value']
-                        if tag['Key'] == 'auto_snap':
+                        if tag['Key'] == 'lambda_snapshot':
                             if tag['Value'] == 'true':
                                 can_delete = True
                         if tag['Key'] == 'Name':
                             name = tag['Value']
-                    created_on = datetime.datetime.strptime(created_on_string, '%Y/%m/%d').date()
+                    created_on = datetime.datetime.strptime(
+                        created_on_string, '%Y/%m/%d').date()
 
                     if created_on <= deletion_date and can_delete == True:
-                        print('Snapshot id {0}, ({1}) from {2} is {3} or more days old... deleting'.format(snap.id, name, created_on_string, delete_after_days))
+                        print('Snapshot id {0}, ({1}) from {2} is {3} or more days old... deleting'.format(
+                            snap.id, name, created_on_string, delete_after_days))
                         deleted_size_counter += snap.volume_size
                         snap.delete()
                         deletion_counter += 1

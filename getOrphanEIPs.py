@@ -1,3 +1,9 @@
+# -----------------------------------------------------------------------------
+# Find EC2 instances with unassigned elastic IP addresses, print details into an S3 bucket.
+# Invoked by crossAccountMaster.py (requires account details (ARN, eventID, etc.) to run).
+# Gets S3 bucket details from S3_BUCKET environment variable.
+# -----------------------------------------------------------------------------
+
 import boto3
 import datetime
 import time
